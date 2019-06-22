@@ -1,3 +1,4 @@
+import os
 import glob
 import numpy as np
 import tensorflow as tf
@@ -36,6 +37,10 @@ class BaseDataset():
         try:
             img = imread(val) if isinstance(val, str) else val
 
+            # grayscale images
+            if np.sum(img[:,:,0] - img[:,:,1]) == 0 and np.sum(img[:,:,0] - img[:,:,2]) == 0:
+                return None
+
             if self.augment and np.random.binomial(1, 0.5) == 1:
                 img = img[:, ::-1, :]
 
@@ -59,14 +64,13 @@ class BaseDataset():
                         items.append(item)
 
                 start = end
-                yield np.array(items)
+                yield items
 
             if recusrive:
                 start = 0
 
             else:
                 raise StopIteration
-
 
     @property
     def data(self):
@@ -116,10 +120,39 @@ class Places365Dataset(BaseDataset):
 
     def load(self):
         if self.training:
-            data = np.array(
-                glob.glob(self.path + '/data_256/**/*.jpg', recursive=True))
+            flist = os.path.join(self.path, 'train.flist')
+            if os.path.exists(flist):
+                data = np.genfromtxt(flist, dtype=np.str, encoding='utf-8')
+            else:
+                data = glob.glob(self.path + '/data_256/**/*.jpg', recursive=True)
+                np.savetxt(flist, data, fmt='%s')
 
         else:
-            data = np.array(glob.glob(self.path + '/val_256/*.jpg'))
+            flist = os.path.join(self.path, 'test.flist')
+            if os.path.exists(flist):
+                data = np.genfromtxt(flist, dtype=np.str, encoding='utf-8')
+            else:
+                data = np.array(glob.glob(self.path + '/val_256/*.jpg'))
+                np.savetxt(flist, data, fmt='%s')
+
+        return data
+
+
+class TestDataset(BaseDataset):
+    def __init__(self, path):
+        super(TestDataset, self).__init__('TEST', path, training=False, augment=False)
+
+    def __getitem__(self, index):
+        path = self.data[index]
+        img = imread(path)
+        return path, img
+
+    def load(self):
+
+        if os.path.isfile(self.path):
+            data = [self.path]
+
+        elif os.path.isdir(self.path):
+            data = list(glob.glob(self.path + '/*.jpg')) + list(glob.glob(self.path + '/*.png'))
 
         return data
